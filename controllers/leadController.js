@@ -1,4 +1,7 @@
 import Lead from '../models/Lead.js';
+import Project from '../models/Project.js';
+import { createNotification } from '../utils/createNotification.js';
+
 
 // ======================================================
 // CREATE LEAD
@@ -40,6 +43,14 @@ export const createLead = async (req, res) => {
       projectType,
     });
 
+    await createNotification({
+      partner: partnerId,
+      type: 'lead_added',
+      title: 'New lead added',
+      message: `${lead.clientName} has been added as a new lead`,
+      referenceId: lead._id,
+    });
+
     return res.status(201).json({
       success: true,
       message: 'Lead created successfully',
@@ -57,7 +68,7 @@ export const getMyLeads = async (req, res) => {
   try {
     const partnerId = req.user.id;
 
-    const { status, projectType } = req.body;
+    const { status, projectType } = req.query;
 
     const filter = { partner: partnerId };
     if (status) filter.clientStatus = status;
@@ -75,9 +86,6 @@ export const getMyLeads = async (req, res) => {
   }
 };
 
-// ======================================================
-// GET LEAD BY ID  →  leadId in body
-// ======================================================
 export const getLeadById = async (req, res) => {
   try {
     const partnerId = req.user.id;
@@ -239,31 +247,55 @@ export const convertLead = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Lead not found' });
 
     if (lead.clientStatus === 'converted')
-      return res.status(400).json({
-        success: false,
-        message: 'Lead already converted',
-      });
+      return res.status(400).json({ success: false, message: 'Lead already converted' });
 
     if (lead.clientStatus === 'rejected')
-      return res.status(400).json({
-        success: false,
-        message: 'Rejected lead cannot be converted',
-      });
+      return res.status(400).json({ success: false, message: 'Rejected lead cannot be converted' });
+
+    const existing = await Project.findOne({ lead: lead._id });
+    if (existing)
+      return res.status(400).json({ success: false, message: 'Project already exists for this lead' });
 
     lead.clientStatus = 'converted';
     await lead.save();
 
-    // TODO: create Project using partnerId + lead details
-    // const project = await Project.create({
-    //   lead: lead._id,
-    //   partner: partnerId,
-    //   ...
-    // });
+    const project = await Project.create({
+      lead: lead._id,
+      partner: partnerId,
+      clientName: lead.clientName,
+      clientEmail: lead.clientEmail,
+      clientNumber: lead.clientNumber,
+      clientAddress: lead.clientAddress,
+      projectName: lead.projectName,
+      projectType: lead.projectType,
+      reference: lead.reference,
+      budget: lead.budget || 0,
+      commissionRate: 0,
+      totalCommission: 0,
+      commissionCredited: 0,
+      commissionBalance: 0,
+      clientPayments: [],
+      commissionPayments: [],
+      balanceDue: lead.budget || 0,
+      timePeriod: lead.timePeriod,
+      startDate: lead.startDate,
+      projectStatus: 'not_started',
+      convertedAt: new Date(),
+    });
+
+    await createNotification({
+      partner: partnerId,
+      type: 'lead_converted',
+      title: 'Lead converted to project',
+      message: `Lead for ${lead.clientName} converted to project "${project.projectName || lead.clientName}"`,
+      referenceId: project._id,
+    });
 
     return res.json({
       success: true,
-      message: 'Lead converted successfully',
+      message: 'Lead converted and project created successfully',
       lead,
+      project,
     });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });

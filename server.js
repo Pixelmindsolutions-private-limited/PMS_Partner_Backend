@@ -10,6 +10,7 @@ import connectDB from './config/db.js';
 import authRoutes from './routes/authRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import LeadRoutes from './routes/leadRoutes.js';
+import ProjectRoutes from './routes/projectRoutes.js';
 
 dns.setServers(['8.8.8.8', '8.8.4.4']);
 
@@ -30,6 +31,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/leads', LeadRoutes);
+app.use('/api/projects', ProjectRoutes);
 
 app.get('/', (req, res) => res.json({ message: 'PMS Partner API running' }));
 

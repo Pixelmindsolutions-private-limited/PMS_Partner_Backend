@@ -21,7 +21,7 @@ router.get('/my-leads', getMyLeads);
 router.post('/get-lead', getLeadById);
 router.put('/update-lead', updateLead);
 router.patch('/update-status', updateLeadStatus);
-router.post('/delete-lead', deleteLead);
+router.delete('/delete-lead', deleteLead);
 router.post('/convert-lead', convertLead);
 
 export default router;
