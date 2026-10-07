@@ -13,18 +13,21 @@ import {
     deleteBanner,
     setCommissionRate,
     addClientPayment,
-    getProjectPayments
+    getProjectPayments,
+    getAllUsers,
+    getPartnersByStatus
  } from '../controllers/adminController.js';
 
 const router = express.Router();
 
 router.post('/login', adminLogin);
 router.patch('/approve', adminProtect, approvePartner);
+router.get("/partners/filter", getPartnersByStatus);//hina
 router.post('/wallet/add-money', adminProtect, addMoneyToWallet);
 router.post('/wallet/deduct-money', adminProtect, deductMoneyFromWallet);
 
 //Banners
-router.get('/list', protect, adminProtect, getAllBanners);
+router.get('/list',  adminProtect, getAllBanners);
 router.post('/get-banner', adminProtect, getBannerById);
 
 router.post('/create', adminProtect, bannerUpload.single('image'), createBanner);
@@ -35,5 +38,6 @@ router.patch('/projects/set-commission', adminProtect, setCommissionRate);
 router.post('/projects/add-client-payment', adminProtect, addClientPayment);
 router.post('/projects/payments', adminProtect, getProjectPayments);
 
+router.get('/users', adminProtect, getAllUsers);//hina
 
 export default router;

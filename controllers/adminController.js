@@ -523,3 +523,89 @@ export const getProjectPayments = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
+
+export const getAllUsers = async (req, res) => {
+  try {
+    const users = await User.find()
+      .select('-otp')
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: users.length,
+      data: users,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+export const getPartnersByStatus = async (req, res) => {
+  try {
+    const { status } = req.query;
+
+    let filter = {};
+
+    if (status === "pending") {
+      filter = {
+        isApproved: false,
+        isBlocked: false,
+      };
+    } 
+    else if (status === "active") {
+      filter = {
+        isApproved: true,
+        isBlocked: false,
+      };
+    } 
+    else if (status === "blocked") {
+      filter = {
+        isBlocked: true,
+      };
+    } 
+    else {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status. Use pending, active or blocked",
+      });
+    }
+
+    const users = await User.find(filter)
+      .select("-otp")
+      .sort({ createdAt: -1 });
+
+    const partners = users.map((user) => ({
+      id: user._id,
+      name: user.name,
+      mobile: user.mobile,
+      email: user.email,
+      aadharImage: user.aadharImage,
+      isRegistered: user.isRegistered,
+      isApproved: user.isApproved,
+      isBlocked: user.isBlocked,
+      status: user.isBlocked
+        ? "blocked"
+        : user.isApproved
+        ? "active"
+        : "pending",
+      wallet: user.wallet,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      status,
+      count: partners.length,
+      data: partners,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
