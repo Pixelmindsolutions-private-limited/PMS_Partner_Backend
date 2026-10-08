@@ -1,8 +1,11 @@
 import jwt from 'jsonwebtoken';
+import mongoose from 'mongoose';
 import User from '../models/User.js';
 import Banner from '../models/Banners.js';
 import Project from '../models/Project.js';
 import Withdrawal from '../models/Withdrawal.js';
+import Lead from '../models/Lead.js';
+
 
 
 // ======================================================
@@ -848,6 +851,378 @@ export const rejectWithdrawal = async (req, res) => {
     });
   } catch (error) {
     console.error('Reject Withdrawal Error:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message,
+    });
+  }
+};
+// ======================================================
+// CREATE LEAD
+// ======================================================
+export const createLead = async (req, res) => {
+  try {
+    const {
+      partnerId,
+      clientName,
+      clientEmail,
+      clientNumber,
+      clientAddress,
+      projectName,
+      budget,
+      reference,
+      timePeriod,
+      startDate,
+      projectType,
+    } = req.body;
+
+    if (!partnerId || !mongoose.isValidObjectId(partnerId))
+      return res.status(400).json({
+        success: false,
+        message: 'A valid partnerId is required',
+      });
+
+    if (!clientName || !clientNumber)
+      return res.status(400).json({
+        success: false,
+        message: 'clientName and clientNumber are required',
+      });
+
+    const partner = await User.findById(partnerId);
+    if (!partner)
+      return res.status(404).json({ success: false, message: 'Partner not found' });
+
+    const lead = await Lead.create({
+      partner: partner._id,
+      clientName,
+      clientEmail,
+      clientNumber,
+      clientAddress,
+      projectName,
+      budget,
+      reference,
+      timePeriod,
+      startDate,
+      projectType,
+    });
+
+    await createNotification({
+      partner: partnerId,
+      type: 'lead_added',
+      title: 'New lead added',
+      message: `${lead.clientName} has been added as a new lead`,
+      referenceId: lead._id,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Lead created successfully',
+      lead,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ======================================================
+// GET ALL LEADS
+// ======================================================
+export const getAllLeads = async (req, res) => {
+  try {
+    const { status, projectType } = req.query;
+
+    const filter = {};
+    if (status) filter.clientStatus = status;
+    if (projectType) filter.projectType = projectType;
+
+    const leads = await Lead.find(filter).sort({ createdAt: -1 });
+
+    return res.json({
+      success: true,
+      count: leads.length,
+      leads,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const getLeadById = async (req, res) => {
+  try {
+    const { leadId } = req.body;
+
+    if (!leadId || !mongoose.isValidObjectId(leadId))
+      return res.status(400).json({ success: false, message: 'A valid leadId is required' });
+
+    const lead = await Lead.findById(leadId);
+
+    if (!lead)
+      return res.status(404).json({ success: false, message: 'Lead not found' });
+
+    return res.json({
+      success: true,
+      lead,
+      clientStatus: lead.clientStatus,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ======================================================
+// UPDATE LEAD  →  leadId in body
+// ======================================================
+export const updateLead = async (req, res) => {
+  try {
+    const { leadId } = req.body;
+
+    if (!leadId || !mongoose.isValidObjectId(leadId))
+      return res.status(400).json({ success: false, message: 'A valid leadId is required' });
+
+    const lead = await Lead.findById(leadId);
+
+    if (!lead)
+      return res.status(404).json({ success: false, message: 'Lead not found' });
+
+    if (lead.clientStatus === 'converted')
+      return res.status(400).json({
+        success: false,
+        message: 'Converted lead cannot be edited',
+      });
+
+    const updatable = [
+      'clientName',
+      'clientEmail',
+      'clientNumber',
+      'clientAddress',
+      'projectName',
+      'budget',
+      'reference',
+      'timePeriod',
+      'startDate',
+      'projectType',
+    ];
+
+    updatable.forEach((field) => {
+      if (req.body[field] !== undefined) lead[field] = req.body[field];
+    });
+
+    await lead.save();
+
+    return res.json({
+      success: true,
+      message: 'Lead updated successfully',
+      lead,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ======================================================
+// UPDATE LEAD STATUS  →  leadId in body
+// ======================================================
+export const updateLeadStatus = async (req, res) => {
+  try {
+    const { leadId, status } = req.body;
+
+    if (!leadId || !mongoose.isValidObjectId(leadId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'A valid leadId is required',
+      });
+    }
+
+    if (!['pending', 'converted', 'rejected'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "status must be 'pending', 'converted' or 'rejected'",
+      });
+    }
+
+    const lead = await Lead.findById(leadId);
+
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        message: 'Lead not found',
+      });
+    }
+
+    if (lead.clientStatus === 'converted') {
+      return res.status(400).json({
+        success: false,
+        message: 'Converted lead status cannot be changed',
+      });
+    }
+
+    lead.clientStatus = status;
+
+    await lead.save();
+
+    return res.json({
+      success: true,
+      message: `Lead status updated to ${status}`,
+      lead,
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+// ======================================================
+// DELETE LEAD  →  leadId in body
+// ======================================================
+export const deleteLead = async (req, res) => {
+  try {
+    const { leadId } = req.body;
+
+    if (!leadId || !mongoose.isValidObjectId(leadId))
+      return res.status(400).json({ success: false, message: 'A valid leadId is required' });
+
+    const lead = await Lead.findById(leadId);
+
+    if (!lead)
+      return res.status(404).json({ success: false, message: 'Lead not found' });
+
+    if (lead.clientStatus === 'converted')
+      return res.status(400).json({
+        success: false,
+        message: 'Converted lead cannot be deleted',
+      });
+
+    await lead.deleteOne();
+
+    return res.json({
+      success: true,
+      message: 'Lead deleted successfully',
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ======================================================
+// CONVERT LEAD  →  leadId in body
+// ======================================================
+export const convertLead = async (req, res) => {
+  try {
+    const { leadId } = req.body;
+
+    if (!leadId || !mongoose.isValidObjectId(leadId))
+      return res.status(400).json({ success: false, message: 'A valid leadId is required' });
+
+    const lead = await Lead.findById(leadId);
+
+    if (!lead)
+      return res.status(404).json({ success: false, message: 'Lead not found' });
+
+    if (lead.clientStatus === 'converted')
+      return res.status(400).json({ success: false, message: 'Lead already converted' });
+
+    if (lead.clientStatus === 'rejected')
+      return res.status(400).json({ success: false, message: 'Rejected lead cannot be converted' });
+
+    const existing = await Project.findOne({ lead: lead._id });
+    if (existing)
+      return res.status(400).json({ success: false, message: 'Project already exists for this lead' });
+
+    lead.clientStatus = 'converted';
+    await lead.save();
+
+    const project = await Project.create({
+      lead: lead._id,
+      partner: lead.partner,
+      clientName: lead.clientName,
+      clientEmail: lead.clientEmail,
+      clientNumber: lead.clientNumber,
+      clientAddress: lead.clientAddress,
+      projectName: lead.projectName,
+      projectType: lead.projectType,
+      reference: lead.reference,
+      budget: lead.budget || 0,
+      commissionRate: 0,
+      totalCommission: 0,
+      commissionCredited: 0,
+      commissionBalance: 0,
+      clientPayments: [],
+      commissionPayments: [],
+      balanceDue: lead.budget || 0,
+      timePeriod: lead.timePeriod,
+      startDate: lead.startDate,
+      projectStatus: 'not_started',
+      convertedAt: new Date(),
+    });
+
+    await createNotification({
+      partner: lead.partner,
+      type: 'lead_converted',
+      title: 'Lead converted to project',
+      message: `Lead for ${lead.clientName} converted to project "${project.projectName || lead.clientName}"`,
+      referenceId: project._id,
+    });
+
+    return res.json({
+      success: true,
+      message: 'Lead converted and project created successfully',
+      lead,
+      project,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ==========================================
+// ADMIN GET ALL PARTNER TRANSACTIONS
+// GET /api/admin/transactions
+// ==========================================
+export const getAllPartnerTransactions = async (req, res) => {
+  try {
+    const partners = await User.find({
+      walletTransactions: { $exists: true, $ne: [] },
+    }).select(
+      'name mobile email wallet walletTransactions'
+    );
+
+    const transactions = [];
+
+    partners.forEach((partner) => {
+      (partner.walletTransactions || []).forEach((transaction) => {
+        transactions.push({
+          _id: transaction._id,
+          partnerId: partner._id,
+          partnerName: partner.name,
+          partnerMobile: partner.mobile,
+          partnerEmail: partner.email,
+
+          type: transaction.type,
+          amount: transaction.amount,
+          description: transaction.description,
+          referenceId: transaction.referenceId,
+          balanceAfter: transaction.balanceAfter,
+
+          createdAt: transaction.createdAt,
+        });
+      });
+    });
+
+    // Latest transaction first
+    transactions.sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+    );
+
+    return res.status(200).json({
+      success: true,
+      count: transactions.length,
+      data: transactions,
+    });
+  } catch (error) {
+    console.error('Get All Partner Transactions Error:', error);
 
     return res.status(500).json({
       success: false,

@@ -1,9 +1,10 @@
 import Project from '../models/Project.js';
 import Lead from '../models/Lead.js';
+import mongoose from 'mongoose';
 
 export const createProject = async (req, res) => {
   try {
-    const partnerId = req.user.id;
+    const partnerId = req.user?.id || req.body.partnerId;
 
     const {
       leadId,
@@ -22,8 +23,11 @@ export const createProject = async (req, res) => {
       requirements,
     } = req.body;
 
-    if (!leadId)
-      return res.status(400).json({ success: false, message: 'leadId is required' });
+    if (!partnerId || !mongoose.isValidObjectId(partnerId))
+      return res.status(400).json({ success: false, message: 'A valid partnerId is required' });
+
+    if (!leadId || !mongoose.isValidObjectId(leadId))
+      return res.status(400).json({ success: false, message: 'A valid leadId is required' });
 
     const lead = await Lead.findOne({ _id: leadId, partner: partnerId });
     if (!lead)
@@ -99,12 +103,10 @@ export const createProject = async (req, res) => {
 // ======================================================
 export const getMyProjects = async (req, res) => {
   try {
-    const partnerId = req.user.id;
-
     // filters come from query string: ?status=in_progress&projectType=app
     const { status, projectType } = req.query;
 
-    const filter = { partner: partnerId };
+    const filter = req.user ? { partner: req.user.id } : {};
     if (status) filter.projectStatus = status;
     if (projectType) filter.projectType = projectType;
 
@@ -125,16 +127,14 @@ export const getMyProjects = async (req, res) => {
 // ======================================================
 export const getProjectById = async (req, res) => {
   try {
-    const partnerId = req.user.id;
     const { projectId } = req.body;
 
-    if (!projectId)
-      return res.status(400).json({ success: false, message: 'projectId is required' });
+    if (!projectId || !mongoose.isValidObjectId(projectId))
+      return res.status(400).json({ success: false, message: 'A valid projectId is required' });
 
-    const project = await Project.findOne({
-      _id: projectId,
-      partner: partnerId,
-    });
+    const filter = { _id: projectId };
+    if (req.user) filter.partner = req.user.id;
+    const project = await Project.findOne(filter);
 
     if (!project)
       return res.status(404).json({ success: false, message: 'Project not found' });
@@ -150,16 +150,14 @@ export const getProjectById = async (req, res) => {
 // ======================================================
 export const getProjectByLead = async (req, res) => {
   try {
-    const partnerId = req.user.id;
     const { leadId } = req.body;
 
-    if (!leadId)
-      return res.status(400).json({ success: false, message: 'leadId is required' });
+    if (!leadId || !mongoose.isValidObjectId(leadId))
+      return res.status(400).json({ success: false, message: 'A valid leadId is required' });
 
-    const project = await Project.findOne({
-      lead: leadId,
-      partner: partnerId,
-    });
+    const filter = { lead: leadId };
+    if (req.user) filter.partner = req.user.id;
+    const project = await Project.findOne(filter);
 
     if (!project)
       return res.status(404).json({
@@ -178,16 +176,14 @@ export const getProjectByLead = async (req, res) => {
 // ======================================================
 export const updateProject = async (req, res) => {
   try {
-    const partnerId = req.user.id;
     const { projectId } = req.body;
 
-    if (!projectId)
-      return res.status(400).json({ success: false, message: 'projectId is required' });
+    if (!projectId || !mongoose.isValidObjectId(projectId))
+      return res.status(400).json({ success: false, message: 'A valid projectId is required' });
 
-    const project = await Project.findOne({
-      _id: projectId,
-      partner: partnerId,
-    });
+    const filter = { _id: projectId };
+    if (req.user) filter.partner = req.user.id;
+    const project = await Project.findOne(filter);
 
     if (!project)
       return res.status(404).json({ success: false, message: 'Project not found' });
@@ -269,11 +265,10 @@ export const updateProject = async (req, res) => {
 // ======================================================
 export const updateProjectStatus = async (req, res) => {
   try {
-    const partnerId = req.user.id;
     const { projectId, projectStatus } = req.body;
 
-    if (!projectId)
-      return res.status(400).json({ success: false, message: 'projectId is required' });
+    if (!projectId || !mongoose.isValidObjectId(projectId))
+      return res.status(400).json({ success: false, message: 'A valid projectId is required' });
 
     const allowed = ['not_started', 'in_progress', 'on_hold', 'completed', 'cancelled'];
     if (!allowed.includes(projectStatus))
@@ -282,10 +277,9 @@ export const updateProjectStatus = async (req, res) => {
         message: `projectStatus must be one of: ${allowed.join(', ')}`,
       });
 
-    const project = await Project.findOne({
-      _id: projectId,
-      partner: partnerId,
-    });
+    const filter = { _id: projectId };
+    if (req.user) filter.partner = req.user.id;
+    const project = await Project.findOne(filter);
 
     if (!project)
       return res.status(404).json({ success: false, message: 'Project not found' });
@@ -315,16 +309,14 @@ export const updateProjectStatus = async (req, res) => {
 // ======================================================
 export const deleteProject = async (req, res) => {
   try {
-    const partnerId = req.user.id;
     const { projectId } = req.body;
 
-    if (!projectId)
-      return res.status(400).json({ success: false, message: 'projectId is required' });
+    if (!projectId || !mongoose.isValidObjectId(projectId))
+      return res.status(400).json({ success: false, message: 'A valid projectId is required' });
 
-    const project = await Project.findOne({
-      _id: projectId,
-      partner: partnerId,
-    });
+    const filter = { _id: projectId };
+    if (req.user) filter.partner = req.user.id;
+    const project = await Project.findOne(filter);
 
     if (!project)
       return res.status(404).json({ success: false, message: 'Project not found' });
@@ -532,4 +524,3 @@ export const deleteProjectLink = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };  
-

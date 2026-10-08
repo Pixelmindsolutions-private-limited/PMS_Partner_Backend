@@ -64,7 +64,7 @@ export const createLead = async (req, res) => {
 // ======================================================
 // GET MY LEADS
 // ======================================================
-export const getMyLeads = async (req, res) => {
+export const getMyLead = async (req, res) => {
   try {
     const partnerId = req.user.id;
 
@@ -99,7 +99,11 @@ export const getLeadById = async (req, res) => {
     if (!lead)
       return res.status(404).json({ success: false, message: 'Lead not found' });
 
-    return res.json({ success: true, lead });
+    return res.json({
+      success: true,
+      lead,
+      clientStatus: lead.clientStatus,
+    });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
@@ -315,5 +319,34 @@ export const convertLead = async (req, res) => {
     });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
+  }
+};
+// ==========================================
+// GET MY LEADS
+// GET /api/partner/my-leads
+// ==========================================
+export const getMyLeads = async (req, res) => {
+  try {
+    const partnerId = req.user.id;
+
+    const leads = await Lead.find({
+      partner: partnerId,
+    }).sort({
+      createdAt: -1,
+    });
+
+    return res.status(200).json({
+      success: true,
+      count: leads.length,
+      data: leads,
+    });
+  } catch (error) {
+    console.error('Get My Leads Error:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message,
+    });
   }
 };
