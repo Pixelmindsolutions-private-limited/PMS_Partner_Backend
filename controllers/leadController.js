@@ -164,39 +164,55 @@ export const updateLeadStatus = async (req, res) => {
     const partnerId = req.user.id;
     const { leadId, status } = req.body;
 
-    if (!leadId)
-      return res.status(400).json({ success: false, message: 'leadId is required' });
-
-    if (!['pending', 'rejected'].includes(status))
+    if (!leadId) {
       return res.status(400).json({
         success: false,
-        message: "status must be 'pending' or 'rejected'",
+        message: 'leadId is required',
       });
+    }
 
-    const lead = await Lead.findOne({ _id: leadId, partner: partnerId });
+    if (!['pending', 'converted', 'rejected'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "status must be 'pending', 'converted' or 'rejected'",
+      });
+    }
 
-    if (!lead)
-      return res.status(404).json({ success: false, message: 'Lead not found' });
+    const lead = await Lead.findOne({
+      _id: leadId,
+      partner: partnerId,
+    });
 
-    if (lead.clientStatus === 'converted')
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        message: 'Lead not found',
+      });
+    }
+
+    if (lead.clientStatus === 'converted') {
       return res.status(400).json({
         success: false,
         message: 'Converted lead status cannot be changed',
       });
+    }
 
     lead.clientStatus = status;
+
     await lead.save();
 
     return res.json({
       success: true,
-      message: 'Lead status updated',
+      message: `Lead status updated to ${status}`,
       lead,
     });
   } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };
-
 // ======================================================
 // DELETE LEAD  →  leadId in body
 // ======================================================

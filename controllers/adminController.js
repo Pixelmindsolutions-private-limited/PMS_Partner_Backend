@@ -2,6 +2,8 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import Banner from '../models/Banners.js';
 import Project from '../models/Project.js';
+import Withdrawal from '../models/Withdrawal.js';
+
 
 // ======================================================
 // ADMIN LOGIN (static creds from .env)
@@ -606,6 +608,251 @@ export const getPartnersByStatus = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: err.message,
+    });
+  }
+};
+// ==========================================
+// ADMIN GET ALL WITHDRAWALS
+// GET /api/admin/withdrawals
+// ==========================================
+export const getAllWithdrawals = async (req, res) => {
+  try {
+    const withdrawals = await Withdrawal.find()
+      .populate('partner', 'name mobile email')
+      .sort({
+        createdAt: -1,
+      });
+
+    return res.status(200).json({
+      success: true,
+      count: withdrawals.length,
+      data: withdrawals,
+    });
+  } catch (error) {
+    console.error('Get All Withdrawals Error:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message,
+    });
+  }
+};
+
+// ==========================================
+// ADMIN GET WITHDRAWAL BY ID
+// GET /api/admin/withdrawals/:id
+// ==========================================
+export const getWithdrawalById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const withdrawal = await Withdrawal.findById(id)
+      .populate('partner', 'name mobile email');
+
+    if (!withdrawal) {
+      return res.status(404).json({
+        success: false,
+        message: 'Withdrawal not found',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: withdrawal,
+    });
+  } catch (error) {
+    console.error('Get Withdrawal By ID Error:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message,
+    });
+  }
+};
+// ==========================================
+// ADMIN APPROVE WITHDRAWAL
+// PUT /api/admin/withdrawals/:id/approve
+// ==========================================
+export const approveWithdrawal = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const {
+      paymentReference,
+      paymentNote,
+    } = req.body;
+
+    const withdrawal = await Withdrawal.findById(id);
+
+    if (!withdrawal) {
+      return res.status(404).json({
+        success: false,
+        message: 'Withdrawal not found',
+      });
+    }
+
+    if (withdrawal.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: `Withdrawal is already ${withdrawal.status}`,
+      });
+    }
+
+    const partner = await User.findById(withdrawal.partner);
+
+    if (!partner) {
+      return res.status(404).json({
+        success: false,
+        message: 'Partner not found',
+      });
+    }
+
+    // --------------------------------------
+    // DEDUCT FROM WALLET
+    // --------------------------------------
+    if (partner.wallet < withdrawal.amount) {
+      return res.status(400).json({
+        success: false,
+        message: 'Insufficient wallet balance',
+      });
+    }
+
+    partner.wallet -= withdrawal.amount;
+
+    // --------------------------------------
+    // WALLET TRANSACTION
+    // --------------------------------------
+    partner.walletTransactions.push({
+      type: 'debit',
+      amount: withdrawal.amount,
+      description: `Withdrawal of ₹${withdrawal.amount}`,
+      referenceId: withdrawal._id,
+      balanceAfter: partner.wallet,
+    });
+
+    // --------------------------------------
+    // UPDATE WITHDRAWAL
+    // --------------------------------------
+    withdrawal.status = 'completed';
+
+    withdrawal.paymentReference =
+      paymentReference || null;
+
+    withdrawal.paymentNote =
+      paymentNote || null;
+
+    withdrawal.processedAt = new Date();
+    withdrawal.paidAt = new Date();
+
+    // --------------------------------------
+    // NOTIFICATION
+    // --------------------------------------
+    partner.notifications.push({
+      title: 'Withdrawal Approved',
+      message: `Your withdrawal request of ₹${withdrawal.amount} has been approved. Your amount will be paid within 24 hours.`,
+      type: 'wallet_debited',
+      referenceId: withdrawal._id,
+      isRead: false,
+    });
+
+    await partner.save();
+    await withdrawal.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Withdrawal approved successfully',
+      data: withdrawal,
+    });
+  } catch (error) {
+    console.error('Approve Withdrawal Error:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message,
+    });
+  }
+};
+
+// ==========================================
+// ADMIN REJECT WITHDRAWAL
+// PUT /api/admin/withdrawals/:id/reject
+// ==========================================
+export const rejectWithdrawal = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rejectionReason } = req.body;
+
+    if (!rejectionReason || !rejectionReason.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rejection reason is required',
+      });
+    }
+
+    const withdrawal = await Withdrawal.findById(id);
+
+    if (!withdrawal) {
+      return res.status(404).json({
+        success: false,
+        message: 'Withdrawal not found',
+      });
+    }
+
+    if (withdrawal.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: `Withdrawal is already ${withdrawal.status}`,
+      });
+    }
+
+    const partner = await User.findById(withdrawal.partner);
+
+    if (!partner) {
+      return res.status(404).json({
+        success: false,
+        message: 'Partner not found',
+      });
+    }
+
+    // --------------------------------------
+    // UPDATE WITHDRAWAL
+    // --------------------------------------
+    withdrawal.status = 'rejected';
+
+    withdrawal.rejectionReason =
+      rejectionReason.trim();
+
+    withdrawal.processedAt = new Date();
+
+    // --------------------------------------
+    // NOTIFICATION
+    // --------------------------------------
+    partner.notifications.push({
+      title: 'Withdrawal Rejected',
+      message: `Your withdrawal request of ₹${withdrawal.amount} has been rejected. Reason: ${rejectionReason}`,
+      type: 'info',
+      referenceId: withdrawal._id,
+      isRead: false,
+    });
+
+    await partner.save();
+    await withdrawal.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Withdrawal rejected successfully',
+      data: withdrawal,
+    });
+  } catch (error) {
+    console.error('Reject Withdrawal Error:', error);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message,
     });
   }
 };
