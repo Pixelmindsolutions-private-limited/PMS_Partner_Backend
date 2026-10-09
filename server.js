@@ -11,7 +11,7 @@ import adminRoutes from "./routes/adminRoutes.js";
 import LeadRoutes from "./routes/leadRoutes.js";
 import ProjectRoutes from "./routes/projectRoutes.js";
 import partnerWithdrawalRoutes from "./routes/partnerWithdrawalRoutes.js";
-
+import emailmassage from "./routes/emailRoutes.js";
 dns.setServers(["8.8.8.8", "8.8.4.4"]);
 
 const __filename = fileURLToPath(import.meta.url);
@@ -33,7 +33,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/leads", LeadRoutes);
 app.use("/api/projects", ProjectRoutes);
 app.use("/api/partner", partnerWithdrawalRoutes);
-
+app.use("/api/email", emailmassage);
 app.get("/", (req, res) => res.json({ message: "PMS Partner API running" }));
 
 const PORT = process.env.PORT || 5000;
